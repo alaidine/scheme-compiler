@@ -11,7 +11,7 @@ This version can only compile integers with the function compile-to-binary.
 - guile, version >= 1.8
 
 *Usage*
-#+bebin_src bash
+#+begin_src bash
 $ guile1.8
 guile> (load "compiler.scm")
 guile> (compile-to-binary 27)
