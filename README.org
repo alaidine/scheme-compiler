@@ -1,0 +1,24 @@
+#+title: Scheme compiler
+#+author: Alaidine Ali
+
+** A scheme-compiler Inspired by Ghuloum's paper [[http://scheme2006.cs.uchicago.edu/11-ghuloum.pdf][An Incremental Approach to Compiler Construction]]
+This project compiles scheme to x86_64 assembly.
+
+This version can only compile integers with the function compile-to-binary.
+
+*Requirements*
+- gcc
+- guile, version >= 1.8
+
+*Usage*
+#+bebin_src bash
+$ guile1.8
+guile> (load "compiler.scm")
+guile> (compile-to-binary 27)
+guile> ^D
+$ ./a.out
+27
+#+end_src
+
+*** License
+The project is licensed under the MIT license.
