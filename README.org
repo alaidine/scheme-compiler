@@ -2,7 +2,7 @@
 #+author: Alaidine Ali
 
 ** A scheme-compiler Inspired by Ghuloum's paper [[http://scheme2006.cs.uchicago.edu/11-ghuloum.pdf][An Incremental Approach to Compiler Construction]]
-This project compiles scheme to x86_64 assembly.
+This project compiles scheme to x86 assembly.
 
 This version can only compile integers with the function compile-to-binary.
 

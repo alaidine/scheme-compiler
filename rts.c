@@ -37,6 +37,7 @@ void show(int x)
 	}
 }
 
+__attribute__((__cdecl__))
 extern int scheme_entry();
 
 int main(int argc, const char **argv)
