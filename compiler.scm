@@ -18,6 +18,8 @@
 (define bool-shift 8)
 (define bool-tag 15)
 
+(define wordsize 4)
+
 ; Check whether the passed form is a primitive call (primcall) form
 (define (primitive-call? form) (eq? 'primcall (car form)))
 
@@ -39,7 +41,7 @@
   (emit "movl $0, %eax") ; zero eax, leaving equal flag in place
   (emit "sete %al") ; set low bit of eax if they are equal
   (emit "sall $~a, %eax" bool-shift) ; shift the bit up to the bool position
-  (emit "orl, $~a, %eax" bool-tag)) ; add boolean type tag
+  (emit "orl $~a, %eax" bool-tag)) ; add boolean type tag
 
 (define (immediate-rep x)
   (cond ((integer? x) (logand (ash x fixnum-shift) #xffffffff))
@@ -52,39 +54,105 @@
 
 (define (immediate? x) (or (integer? x) (char? x) (boolean? x) (null? x)))
 
-(define (compile-expr e)
+(define (compile-expr e si)
   (cond
    ((immediate? e) (emit "movl $~a, %eax" (immediate-rep e)))
-   ((primitive-call? e) (compile-primitive-call e))
+   ((primitive-call? e) (compile-primitive-call e si))
    ))
 
-(define (compile-primitive-call form)
+(define (compile-primitive-call form si)
   (case (primitive-op form)
+    ; add1 - increment the first arg (fixnum) and return it
     ((add1)
-     (compile-expr (primitive-op-arg1 form))
+     (compile-expr (primitive-op-arg1 form) si)
      (emit "addl $~a, %eax" (immediate-rep 1)))
 
+    ; sub1 - decrement the first arg (fixnum) and return it
     ((sub1)
-     (compile-expr (primitve-op-arg1 form))
+     (compile-expr (primitive-op-arg1 form) si)
      (emit "subl $~a, %eax" (immediate-rep 1)))
 
     ; integer? - check whether the first arg is an integer
     ((integer?)
-     (compile-expr (primitive-op-arg1 form))
+     (compile-expr (primitive-op-arg1 form) si)
      (emit "andl $~a, %eax" fixnum-mask)
      (emit-is-eax-equal-to 0))
 
-    ; boolean? - check whether the first arg is a character
+    ; boolean? - check whether the first arg is a boolean
+    ((boolean?)
+     (compile-expr (primitive-op-arg1 form) si)
+     (emit "andl $~a, %eax" bool-mask)
+     (emit-is-eax-equal-to bool-tag))
+
+    ; char? - check whether the first arg is a character
     ((char?)
-     (compile-expr (primitive-op-arg1 form))
+     (compile-expr (primitive-op-arg1 form) si)
      (emit "andl $~a, %eax" char-mask)
      (emit-is-eax-equal-to char-tag))
 
     ; zero? - check whether the first arg is the fixnum 0
     ((zero?)
-     (compile-expr (primitive-op-arg1 form))
+     (compile-expr (primitive-op-arg1 form) si)
      (emit-is-eax-equal-to 0))
+
+    ; + - addition of two fixnums
+    ((+)
+     (compile-expr (primitive-op-arg1 form) si)
+     (emit "movl %eax, ~a(%esp)" si)
+     (compile-expr (primitive-op-arg2 form) (- si wordsize))
+     (emit "addl ~a(%esp), %eax" si))
+
+    ; - - substraction of two fixnums
+    ((-)
+     (compile-expr (primitive-op-arg2 form) si)
+     (emit "movl %eax, ~a(%esp)" si)
+     (compile-expr (primitive-op-arg1 form) (- si wordsize))
+     (emit "subl ~a(%esp), %eax" si))
+
+    ; * = multiplication of two fixnums
+    ((*)
+     (compile-expr (primitive-op-arg1 form) si)
+     (emit "movl %eax, ~a(%esp)" si)
+     (compile-expr (primitive-op-arg2 form) (- si wordsize))
+     (emit "shrl $~a, %eax" fixnum-shift) ; make sure only one is shifted
+     (emit "imull ~a(%esp), %eax" si))
+
+    ; = - fixnum equality test
+    ((=)
+     (compile-expr (primitive-op-arg1 form) si)
+     (emit "movl %eax, ~a(%esp)" si)
+     (compile-expr (primitive-op-arg2 form) (- si wordsize))
+     (emit "cmpl %eax, ~a(%esp)" si)
+     (emit "movl $0, %eax")
+     (emit "sete %al")
+     (emit "sall $~a, %eax" bool-shift)
+     (emit "orl $~a, %eax" bool-tag))
+
+    ; < - fixnum less-than test
+    ((<)
+     (compile-expr (primitive-op-arg1 form) si)
+     (emit "movl %eax, ~a(%esp)" si)
+     (compile-expr (primitive-op-arg2 form) (- si wordsize))
+     (emit "cmpl %eax, ~a(%esp)" si)
+     (emit "movl $0, %eax")
+     (emit "setl %al")
+     (emit "sall $~a, %eax" bool-shift)
+     (emit "orl $~a, %eax" bool-tag))
+
+    ; char=? - character equality test
+    ((char=?)
+     (compile-expr (primitive-op-arg1 form) si)
+     (emit "shrl $~a, %eax" char-shift) ; remove tag bits
+     (emit "movl %eax, ~a(%esp)" si)
+     (compile-expr (primitive-op-arg2 form) (- si wordsize))
+     (emit "shrl $~a, %eax" char-shift) ; remove tag bits
+     (emit "cmpl %eax, ~a(%esp)" si)
+     (emit "movl $0, %eax")
+     (emit "sete %al")
+     (emit "sall $~a, %eax" bool-shift)
+     (emit "orl $~a, %eax" bool-tag))
     ))
+
 
 (define (compile-and-run program)
   (begin (compile-to-binary program)
@@ -95,7 +163,7 @@
   (emit ".p2align 4")
   (emit ".globl scheme_entry")
   (emit "scheme_entry:")
-  (compile-expr program)
+  (compile-expr program (- wordsize))
   (emit "ret"))
 
 (define (compile-to-binary program)
